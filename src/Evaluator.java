@@ -1,7 +1,7 @@
 public class Evaluator {
     private ArithmeticOperations arithmeticOperations = new ArithmeticOperations();
 
-    public double eval(String expression) throws Exception {
+    public double eval(String expression, ExecutionContext executionContext) throws Exception {
         // Eliminar los paréntesis y dividir por espacios
         String[] tokens = expression.replaceAll("[()]", "").trim().split("\\s+");
         if (tokens.length != 3) {
