@@ -10,7 +10,15 @@ public class Evaluator {
 
     public String eval(String expression, ExecutionContext context) throws Exception {
         expression = expression.trim();
-        if (expression.matches("\\((-?\\d+(\\.\\d+)?)\\)")) { // Chequea si es un número entre paréntesis
+        if (expression.startsWith("(ATOM")) {
+            return handleAtom(expression, context);
+        } else if (expression.startsWith("(LIST")) {
+            return handleList(expression, context);
+        } else if (expression.startsWith("(EQUAL")) {
+            return handleEqual(expression, context);
+        } else if (expression.matches("\\((<|>)\\s+[^\\s]+\\s+[^\\s]+\\)")) {
+            return handleComparison(expression, context);
+        } else if (expression.matches("\\((-?\\d+(\\.\\d+)?)\\)")) { // Chequea si es un número entre paréntesis
             return expression.substring(1, expression.length() - 1);
         } else if (expression.matches("-?\\d+(\\.\\d+)?")) { // Chequea si es un número sin paréntesis
             return expression;
@@ -65,7 +73,37 @@ public class Evaluator {
         return evaluatedValue;
     }
     
+    private String handleAtom(String expression, ExecutionContext context) throws Exception {
+        String argument = extractArgument(expression); // Implementa esta función para extraer el único argumento de la expresión
+        try {
+            Double.parseDouble(argument); // Intenta parsear como número
+            return "T"; // Es un átomo si es un número
+        } catch (NumberFormatException e) {
+            return argument.matches("[a-zA-Z]+") ? "T" : "NIL"; // Es un átomo si es una palabra sin espacios
+        }
+    }
     
+    private String handleList(String expression, ExecutionContext context) throws Exception {
+        // Lista siempre retorna T porque cualquier expresión dentro de (LIST ...) se considera una lista
+        return "T";
+    }
+    
+    private String handleEqual(String expression, ExecutionContext context) throws Exception {
+        // Extrae los dos argumentos y compáralos
+        String[] arguments = extractArguments(expression, 2); // Implementa esta función para extraer exactamente dos argumentos
+        double operand1 = Double.parseDouble(eval(arguments[0], context));
+        double operand2 = Double.parseDouble(eval(arguments[1], context));
+        return operand1 == operand2 ? "T" : "NIL";
+    }
+    
+    private String handleComparison(String expression, ExecutionContext context) throws Exception {
+        String operator = expression.substring(1, 2);
+        String[] arguments = extractArguments(expression, 2);
+        double operand1 = Double.parseDouble(eval(arguments[0], context));
+        double operand2 = Double.parseDouble(eval(arguments[1], context));
+        boolean result = operator.equals("<") ? operand1 < operand2 : operand1 > operand2;
+        return result ? "T" : "NIL";
+    }    
 
     private String handleArithmetic(String expression, ExecutionContext context) throws Exception {
         String trimmedExpression = expression.trim().substring(1, expression.length() - 1).trim();
@@ -122,6 +160,50 @@ public class Evaluator {
         return expression.substring(1, endIndex);
     }
 
+    private String extractArgument(String expression) {
+        // Esta función asume que se extrará el primer argumento después del operador
+        String trimmedExpression = expression.trim().substring(expression.indexOf(' ') + 1, expression.length() - 1).trim();
+        return extractFirstArgument(trimmedExpression);
+    }
+    
+    private String[] extractArguments(String expression, int expectedArgs) {
+        // Extrae y devuelve exactamente expectedArgs argumentos de la expresión
+        List<String> arguments = new ArrayList<>();
+        String argsStr = expression.trim().substring(expression.indexOf(' ') + 1, expression.length() - 1).trim();
+        while (!argsStr.isEmpty() && arguments.size() < expectedArgs) {
+            String arg = extractFirstArgument(argsStr);
+            arguments.add(arg);
+            argsStr = argsStr.substring(arg.length()).trim();
+            if (argsStr.startsWith(" ")) {
+                argsStr = argsStr.substring(1);
+            }
+        }
+        return arguments.toArray(new String[0]);
+    }
+    
+    private String extractFirstArgument(String argsStr) {
+        if (argsStr.startsWith("(")) {
+            int parenCount = 1;
+            for (int i = 1; i < argsStr.length(); i++) {
+                if (argsStr.charAt(i) == '(') {
+                    parenCount++;
+                } else if (argsStr.charAt(i) == ')') {
+                    parenCount--;
+                    if (parenCount == 0) {
+                        return argsStr.substring(0, i + 1);
+                    }
+                }
+            }
+        } else {
+            int firstSpace = argsStr.indexOf(' ');
+            int firstParen = argsStr.indexOf('(');
+            if (firstSpace == -1) firstSpace = argsStr.length();
+            if (firstParen == -1) firstParen = argsStr.length();
+            return argsStr.substring(0, Math.min(firstSpace, firstParen));
+        }
+        return argsStr; // Fallback, debería manejarse adecuadamente en el código que llama
+    }
+    
     private String evaluateFunctionCall(String expression, ExecutionContext context) throws Exception {
         String functionName = getFunctionName(expression);
         FunctionDefinition function = functions.get(functionName);
