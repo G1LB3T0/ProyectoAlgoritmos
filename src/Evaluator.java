@@ -1,3 +1,4 @@
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -7,35 +8,58 @@ public class Evaluator {
     private ArithmeticOperations arithmeticOperations = new ArithmeticOperations();
     private Map<String, FunctionDefinition> functions = new HashMap<>();
 
-    public String eval(String expression) throws Exception {
+    public String eval(String expression, ExecutionContext context) throws Exception {
         // Comprobar si es una instrucción QUOTE
         if (expression.startsWith("'") || expression.startsWith("(QUOTE ")) {
             return handleQuote(expression);
         }
-
+    
+        // Manejo de la definición de funciones (DEFUN)
         if (expression.startsWith("(DEFUN")) {
-            // Parsear y almacenar la definición de la función
             defineFunction(expression);
             return "Function defined.";
         }
-
-        if (functions.containsKey(getFunctionName(expression))) {
-            return evaluateFunctionCall(expression);
+    
+        // Identificar y evaluar llamadas a funciones
+        String functionName = getFunctionName(expression);
+        if (functions.containsKey(functionName)) {
+            return evaluateFunctionCall(expression, context);
         }
-
-        // Eliminar los paréntesis y dividir por espacios para operaciones aritméticas
-        String[] tokens = expression.replaceAll("[()]", "").trim().split("\\s+");
-        if (tokens.length != 3) {
-            throw new IllegalArgumentException("Invalid expression format.");
-        }
-
-        String operator = tokens[0];
-        double operand1 = Double.parseDouble(tokens[1]);
-        double operand2 = Double.parseDouble(tokens[2]);
-
-        // Convertir el resultado de las operaciones aritméticas a String para mantener la consistencia del tipo de retorno
-        return String.valueOf(arithmeticOperations.execute(operator, operand1, operand2));
+    
+        // Ajuste para manejar operaciones aritméticas
+        return handleArithmetic(expression, context);
     }
+    
+
+    private String handleArithmetic(String expression, ExecutionContext context) throws Exception {
+        // Remover los paréntesis exteriores y dividir la expresión en tokens de manera más inteligente
+        String trimmedExpression = expression.trim().substring(1, expression.length() - 1).trim();
+        List<String> tokens = splitExpression(trimmedExpression);
+    
+        String operator = tokens.get(0);
+        if (tokens.size() < 3) { // Asegurarse de que hay al menos un operador y dos operandos
+            throw new IllegalArgumentException("Invalid arithmetic expression format: " + expression);
+        }
+    
+        try {
+            double result = 0;
+            for (int i = 1; i < tokens.size(); i++) {
+                double operand = evaluateOperand(tokens.get(i), context);
+                result = i == 1 ? operand : arithmeticOperations.execute(operator, result, operand);
+            }
+            return String.valueOf(result);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Operands must be numeric or valid expressions: " + tokens);
+        }
+    }
+    
+    private double evaluateOperand(String operand, ExecutionContext context) throws Exception {
+        if (operand.startsWith("(")) { // Es una expresión anidada
+            return Double.parseDouble(eval(operand, context));
+        } else { // Es un valor numérico directo
+            return Double.parseDouble(operand);
+        }
+    }        
 
     private void defineFunction(String expression) {
         // Eliminar (DEFUN y el paréntesis final
@@ -49,30 +73,36 @@ public class Evaluator {
     }
 
     private String getFunctionName(String expression) {
-        return expression.substring(1, expression.indexOf(' '));
+        int spaceIndex = expression.indexOf(' ');
+        int endIndex = spaceIndex != -1 ? spaceIndex : expression.length() - 1;
+        return expression.substring(1, endIndex);
     }
     
-    private String evaluateFunctionCall(String expression) throws Exception {
+
+    
+    private String evaluateFunctionCall(String expression, ExecutionContext context) throws Exception {
         String functionName = getFunctionName(expression);
         FunctionDefinition function = functions.get(functionName);
     
         // Extraer argumentos
-        String argsStr = expression.substring(expression.indexOf(' ') + 1, expression.length() - 1);
+        String argsStr = expression.substring(expression.indexOf('(') + functionName.length() + 2, expression.length() - 1);
         List<String> arguments = Arrays.asList(argsStr.split("\\s+"));
     
-        // Validar número de argumentos
-        if (arguments.size() != function.getParameters().size()) {
+        ExecutionContext functionContext = new ExecutionContext();
+    
+        List<String> parameters = function.getParameters();
+        if (arguments.size() != parameters.size()) {
             throw new IllegalArgumentException("Incorrect number of arguments for function " + functionName);
         }
     
-        // Reemplazar parámetros por argumentos en el cuerpo de la función
-        String evaluatedBody = function.getBody();
         for (int i = 0; i < arguments.size(); i++) {
-            evaluatedBody = evaluatedBody.replaceAll("\\b" + function.getParameters().get(i) + "\\b", arguments.get(i));
+            String param = parameters.get(i);
+            // Importante: Evaluar cada argumento en el contexto actual
+            String arg = eval(arguments.get(i), context);
+            functionContext.setVariable(param, arg);
         }
     
-        // Evaluar el cuerpo reemplazado
-        return eval(evaluatedBody);
+        return eval(function.getBody(), functionContext);
     }
 
     private String handleQuote(String expression) {
@@ -84,4 +114,25 @@ public class Evaluator {
         // Devolver la expresión tal cual, sin evaluar
         return quotedExpression.trim();
     }
+
+    private List<String> splitExpression(String expression) {
+        List<String> tokens = new ArrayList<>();
+        int parenthesisCount = 0;
+        StringBuilder currentToken = new StringBuilder();
+        for (char c : expression.toCharArray()) {
+            if (c == '(') parenthesisCount++;
+            if (c == ')') parenthesisCount--;
+            if (parenthesisCount == 0 && Character.isWhitespace(c)) {
+                if (currentToken.length() > 0) {
+                    tokens.add(currentToken.toString());
+                    currentToken = new StringBuilder();
+                }
+            } else {
+                currentToken.append(c);
+            }
+        }
+        if (currentToken.length() > 0) tokens.add(currentToken.toString());
+        return tokens;
+    }
+
 }
