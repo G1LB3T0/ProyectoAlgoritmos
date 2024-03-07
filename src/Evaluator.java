@@ -146,13 +146,58 @@ public class Evaluator {
 
     private void defineFunction(String expression) {
         String withoutDefun = expression.substring(6, expression.length() - 1).trim();
-        String[] parts = withoutDefun.split("\\s+", 3);
-        String functionName = parts[0];
-        List<String> parameters = Arrays.asList(parts[1].replaceAll("[()]", "").split("\\s+"));
-        String body = parts[2];
-
+        int firstSpaceIndex = withoutDefun.indexOf(' ');
+        int paramsStartIndex = withoutDefun.indexOf('(', firstSpaceIndex);
+        int paramsEndIndex = withoutDefun.indexOf(')', paramsStartIndex);
+        
+        if (firstSpaceIndex == -1 || paramsStartIndex == -1 || paramsEndIndex == -1) {
+            throw new IllegalArgumentException("Function definition is malformed: " + expression);
+        }
+    
+        String functionName = withoutDefun.substring(0, firstSpaceIndex).trim();
+        String paramsString = withoutDefun.substring(paramsStartIndex + 1, paramsEndIndex).trim();
+        String body = withoutDefun.substring(paramsEndIndex + 1).trim();
+    
+        if (functionName.isEmpty() || paramsString.isEmpty() || body.isEmpty()) {
+            throw new IllegalArgumentException("Function definition requires a name, parameters, and a body.");
+        }
+    
+        List<String> parameters = Arrays.asList(paramsString.split("\\s+"));
+        
         functions.put(functionName, new FunctionDefinition(parameters, body));
-    }
+    }    
+    
+    private String evaluateFunctionCall(String expression, ExecutionContext context) throws Exception {
+        String functionName = getFunctionName(expression);
+        FunctionDefinition function = functions.get(functionName);
+    
+        String argsStr = expression.substring(expression.indexOf('(') + functionName.length() + 2, expression.length() - 1).trim();
+        List<String> arguments = splitArguments(argsStr);
+    
+        if (arguments.size() != function.getParameters().size()) {
+            throw new IllegalArgumentException("Incorrect number of arguments for function " + functionName + ". Expected: " + function.getParameters().size() + ", Got: " + arguments.size());
+        }
+    
+        ExecutionContext functionContext = new ExecutionContext();
+        for (int i = 0; i < arguments.size(); i++) {
+            // Reemplaza la llamada a eval con una lógica similar a evaluateOperand
+            // para manejar específicamente nombres de variables y expresiones anidadas.
+            String arg = arguments.get(i);
+            String argValue;
+            if (arg.matches("-?\\d+(\\.\\d+)?")) { // Es un número
+                argValue = arg;
+            } else {
+                // Intenta obtener el valor de la variable del contexto si no es un número.
+                argValue = context.getVariable(arg);
+                if (argValue.equals("NIL")) {
+                    throw new IllegalArgumentException("Variable " + arg + " is not defined.");
+                }
+            }
+            functionContext.setVariable(function.getParameters().get(i), argValue);
+        }
+    
+        return eval(function.getBody(), functionContext);
+    }    
 
     private String getFunctionName(String expression) {
         int spaceIndex = expression.indexOf(' ');
@@ -202,29 +247,7 @@ public class Evaluator {
             return argsStr.substring(0, Math.min(firstSpace, firstParen));
         }
         return argsStr; // Fallback, debería manejarse adecuadamente en el código que llama
-    }
-    
-    private String evaluateFunctionCall(String expression, ExecutionContext context) throws Exception {
-        String functionName = getFunctionName(expression);
-        FunctionDefinition function = functions.get(functionName);
-
-        String argsStr = expression.substring(expression.indexOf('(') + functionName.length() + 2, expression.length() - 1).trim();
-        List<String> arguments = splitArguments(argsStr);
-
-        ExecutionContext functionContext = new ExecutionContext();
-        List<String> parameters = function.getParameters();
-
-        if (arguments.size() != parameters.size()) {
-            throw new IllegalArgumentException("Incorrect number of arguments for function " + functionName + ". Expected: " + parameters.size() + ", Got: " + arguments.size());
-        }
-
-        for (int i = 0; i < arguments.size(); i++) {
-            String argValue = eval(arguments.get(i), context);
-            functionContext.setVariable(parameters.get(i), argValue);
-        }
-
-        return eval(function.getBody(), functionContext);
-    }
+    }   
 
     private String handleQuote(String expression) {
         String quotedExpression = expression.startsWith("'") ?
