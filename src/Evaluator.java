@@ -24,28 +24,26 @@ public class Evaluator {
             return expression;
         } else if (expression.startsWith("(SETQ")) {
             return handleSetq(expression, context);
-        }
-        
-        if (expression.startsWith("'") || expression.startsWith("(QUOTE ")) {
+        } else if (expression.startsWith("'") || expression.startsWith("(QUOTE ")) {
             return handleQuote(expression);
-        }
-
-        if (expression.startsWith("(DEFUN")) {
+        } else if (expression.startsWith("(DEFUN")) {
             defineFunction(expression);
             return "Function defined.";
+        } else if (expression.startsWith("(IF")) {
+            return handleIf(expression, context); // Llama a evalIfStatement para manejar el IF
+        } else {
+            String functionName = getFunctionName(expression);
+            if (functions.containsKey(functionName)) {
+                return evaluateFunctionCall(expression, context);
+            } else if (expression.startsWith("(SETQ")) {
+                return handleSetq(expression, context);
+            } else {
+                return handleArithmetic(expression, context);
+            }
         }
-
-        String functionName = getFunctionName(expression);
-        if (functions.containsKey(functionName)) {
-            return evaluateFunctionCall(expression, context);
-        }
-
-        if (expression.startsWith("(SETQ")) {
-            return handleSetq(expression, context);
-        }        
-
-        return handleArithmetic(expression, context);
     }
+
+
 
     private String handleSetq(String expression, ExecutionContext context) throws Exception {
         // Primero, elimina los paréntesis exteriores y luego divide la expresión.
@@ -95,15 +93,32 @@ public class Evaluator {
         double operand2 = Double.parseDouble(eval(arguments[1], context));
         return operand1 == operand2 ? "T" : "NIL";
     }
-    
+
     private String handleComparison(String expression, ExecutionContext context) throws Exception {
         String operator = expression.substring(1, 2);
         String[] arguments = extractArguments(expression, 2);
-        double operand1 = Double.parseDouble(eval(arguments[0], context));
-        double operand2 = Double.parseDouble(eval(arguments[1], context));
+        double operand1;
+        double operand2;
+
+        // Evalúa las expresiones y toma en cuenta las variables
+        if (arguments[0].matches("-?\\d+(\\.\\d+)?")) {
+            operand1 = Double.parseDouble(arguments[0]);  // Si es un número, simplemente lo conviertes
+        } else {
+            operand1 = Double.parseDouble(context.getVariable(arguments[0])); // Si es una variable, obtienes su valor del contexto
+        }
+
+        if (arguments[1].matches("-?\\d+(\\.\\d+)?")) {
+            operand2 = Double.parseDouble(arguments[1]);  // Si es un número, simplemente lo conviertes
+        } else {
+            operand2 = Double.parseDouble(context.getVariable(arguments[1])); // Si es una variable, obtienes su valor del contexto
+        }
+
+        // Realiza la comparación
         boolean result = operator.equals("<") ? operand1 < operand2 : operand1 > operand2;
+
         return result ? "T" : "NIL";
-    }    
+    }
+
 
     private String handleArithmetic(String expression, ExecutionContext context) throws Exception {
         String trimmedExpression = expression.trim().substring(1, expression.length() - 1).trim();
@@ -276,4 +291,29 @@ public class Evaluator {
         }
         return arguments;
     }
+    private String handleIf(String expression, ExecutionContext context) throws Exception {
+        String codigo = expression.substring(4, expression.length() - 1);
+
+        String[] partes = codigo.split("(?=\\()");
+
+        if (partes.length != 3) {
+            throw new IllegalArgumentException("IF statement must have exactly 3 parts");
+        }
+
+        String conditionResult = eval(partes[0], context);
+
+        String parteAEvaluar = conditionResult.equals("T") ? partes[1] : partes[2];
+
+        return eval(parteAEvaluar, context);
+    }
+
+
+
+    private void executeAction(String action) {
+        // Aquí puedes implementar la lógica para ejecutar la acción correspondiente
+        System.out.println("Ejecutando acción: " + action);
+    }
+
+
+
 }
