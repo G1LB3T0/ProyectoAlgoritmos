@@ -26,7 +26,9 @@ public class Evaluator {
             return handleSetq(expression, context);
         } else if (expression.startsWith("'") || expression.startsWith("(QUOTE ") || expression.startsWith("(' ")) {
             return handleQuote(expression);
-        } else if (expression.startsWith("(DEFUN")) {
+        }
+
+        if (expression.startsWith("(DEFUN")) {
             defineFunction(expression);
             return "Function defined.";
         } else if (expression.startsWith("(IF") || expression.startsWith("(COND ")) {
