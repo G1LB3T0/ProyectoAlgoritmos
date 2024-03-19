@@ -4,7 +4,7 @@ public class LispInterpreter {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         Evaluator evaluator = new Evaluator();
-        ExecutionContext context = new ExecutionContext(); // Crear el contexto de ejecución
+        ExecutionContext context = new ExecutionContext(); // Crear el contexto de ej(Decución
         System.out.println("LISP Interpreter. Enter expressions or 'exit' to quit.");
 
         while (true) {

@@ -3,6 +3,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Evaluator {
     private ArithmeticOperations arithmeticOperations = new ArithmeticOperations();
@@ -73,37 +75,7 @@ public class Evaluator {
         return evaluatedValue;
     }
     
-    private String handleAtom(String expression, ExecutionContext context) throws Exception {
-        String argument = extractArgument(expression); // Implementa esta función para extraer el único argumento de la expresión
-        try {
-            Double.parseDouble(argument); // Intenta parsear como número
-            return "T"; // Es un átomo si es un número
-        } catch (NumberFormatException e) {
-            return argument.matches("[a-zA-Z]+") ? "T" : "NIL"; // Es un átomo si es una palabra sin espacios
-        }
-    }
     
-    private String handleList(String expression, ExecutionContext context) throws Exception {
-        // Lista siempre retorna T porque cualquier expresión dentro de (LIST ...) se considera una lista
-        return "T";
-    }
-    
-    private String handleEqual(String expression, ExecutionContext context) throws Exception {
-        // Extrae los dos argumentos y compáralos
-        String[] arguments = extractArguments(expression, 2); // Implementa esta función para extraer exactamente dos argumentos
-        double operand1 = Double.parseDouble(eval(arguments[0], context));
-        double operand2 = Double.parseDouble(eval(arguments[1], context));
-        return operand1 == operand2 ? "T" : "NIL";
-    }
-    
-    private String handleComparison(String expression, ExecutionContext context) throws Exception {
-        String operator = expression.substring(1, 2);
-        String[] arguments = extractArguments(expression, 2);
-        double operand1 = Double.parseDouble(eval(arguments[0], context));
-        double operand2 = Double.parseDouble(eval(arguments[1], context));
-        boolean result = operator.equals("<") ? operand1 < operand2 : operand1 > operand2;
-        return result ? "T" : "NIL";
-    }    
 
     private String handleArithmetic(String expression, ExecutionContext context) throws Exception {
         String trimmedExpression = expression.trim().substring(1, expression.length() - 1).trim();
@@ -276,4 +248,105 @@ public class Evaluator {
         }
         return arguments;
     }
+
+    /* FUNCIÓN ATOM */
+    private String handleAtom(String expression, ExecutionContext context) throws Exception {
+        String argument = extractArgument(expression); // Implementa esta función para extraer el único argumento de la expresión
+        if (argument.isEmpty()) {
+            throw new IllegalArgumentException("La expresión no contiene un argumento válido.");
+        }
+        // Es un átomo si es un número
+        if (argument.chars().allMatch(Character::isDigit) || (argument.startsWith("-") && argument.substring(1).chars().allMatch(Character::isDigit))) {
+            return "T";
+        }
+        // Es un átomo si es una palabra sin espacios
+        if (argument.matches("[a-zA-Z]+")) {
+            return "T";
+        }
+        return "NIL";
+    }
+
+    /* FUNCIÓN EQUAL */
+    
+    private String handleEqual(String expression, ExecutionContext context) throws Exception {
+        // Verifica si la expresión tiene al menos un carácter
+        if (expression.length() < 2) {
+            throw new IllegalArgumentException("La expresión es demasiado corta para contener un operador.");
+        }
+        
+        // Extrae el operador
+        String operator = expression.substring(1, 2);
+    
+        // Extrae los dos argumentos
+        String[] arguments = extractArguments(expression, 2); // Implementa esta función para extraer exactamente dos argumentos
+    
+        // Intenta parsear los argumentos como números
+        try {
+            double operand1 = Double.parseDouble(eval(arguments[0], context));
+            double operand2 = Double.parseDouble(eval(arguments[1], context));
+            // Realiza la comparación numérica
+            return Double.compare(operand1, operand2) == 0 ? "T" : "NIL";
+        } catch (NumberFormatException e) {
+            // Si no se pueden parsear como números, compara las cadenas directamente
+            return arguments[0].equals(arguments[1]) ? "T" : "NIL";
+        }
+    }
+
+
+    /* FUNCIÓN > , < */
+
+    private String handleComparison(String expression, ExecutionContext context) throws Exception {
+        // Verifica si la expresión tiene al menos un carácter
+        if (expression.length() < 2) {
+            throw new IllegalArgumentException("La expresión es demasiado corta para contener un operador.");
+        }
+        
+        // Extrae el operador
+        String operator = expression.substring(1, 2);
+    
+        // Extrae los dos argumentos
+        String[] arguments = extractArguments(expression, 2); // Implementa esta función para extraer exactamente dos argumentos
+    
+        // Intenta parsear los argumentos como números
+        try {
+            double operand1 = Double.parseDouble(eval(arguments[0], context));
+            double operand2 = Double.parseDouble(eval(arguments[1], context));
+            // Realiza la comparación numérica
+            return performNumericComparison(operator, operand1, operand2) ? "T" : "NIL";
+        } catch (NumberFormatException e) {
+            // Si no se pueden parsear como números, compara las cadenas directamente
+            return performStringComparison(operator, arguments[0], arguments[1]) ? "T" : "NIL";
+        }
+    }
+    
+    private boolean performNumericComparison(String operator, double operand1, double operand2) {
+        switch (operator) {
+            case "<":
+                return operand1 < operand2;
+            case ">":
+                return operand1 > operand2;
+            default:
+                throw new IllegalArgumentException("Operador no válido: " + operator);
+        }
+    }
+    
+    private boolean performStringComparison(String operator, String operand1, String operand2) {
+        switch (operator) {
+            case "<":
+                return operand1.compareTo(operand2) < 0;
+            case ">":
+                return operand1.compareTo(operand2) > 0;
+            default:
+                throw new IllegalArgumentException("Operador no válido: " + operator);
+        }
+    }
+    
+
+    /* FUNCIÓN LIST */
+
+    private String handleList(String expression, ExecutionContext context) throws Exception {
+        
+        return "";
+    }
+    
 }
