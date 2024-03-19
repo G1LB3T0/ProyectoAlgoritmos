@@ -10,7 +10,7 @@ public class LispInterpreter {
         System.out.println("LISP Interpreter. Enter expressions or 'exit' to quit.");
 
         // Leer expresiones del archivo
-        String fileName = "expressions.txt"; // Cambia esto al nombre de tu archivo
+        String fileName = "data/expressions.txt"; // Cambia esto al nombre de tu archivo
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
             String line;
             while ((line = br.readLine()) != null) {

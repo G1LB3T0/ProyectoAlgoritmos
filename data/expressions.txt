@@ -1,0 +1,11 @@
+(DEFUN test0 (x) (IF (= x 0) (QUOTE nothing) (IF (= x 1) (QUOTE something) (IF (< x 4) (QUOTE a few things) (QUOTE A whole bunch of things)))))
+
+(SETQ var1 0)
+(SETQ var2 1)
+(SETQ var3 3)
+(SETQ var4 10)
+
+(DEFUN FACT (N) (IF (= N 0) 1 (* N (FACT (- N 1)))))
+
+(DEFUN FIB (N) (IF (= N 0) 0 (IF (= N 1) 1 (+ (FIB (- N 1)) (FIB (- N 2))))))
+
