@@ -16,7 +16,7 @@ public class Evaluator {
             return handleList(expression, context);
         } else if (expression.startsWith("(EQUAL")) {
             return handleEqual(expression, context);
-        } else if (expression.matches("\\((<|>)\\s+[^\\s]+\\s+[^\\s]+\\)")) {
+        } else if (expression.matches("\\((<|>|=)\\s+[^\\s]+\\s+[^\\s]+\\)")) {
             return handleComparison(expression, context);
         } else if (expression.matches("\\((-?\\d+(\\.\\d+)?)\\)")) { // Chequea si es un número entre paréntesis
             return expression.substring(1, expression.length() - 1);
@@ -24,12 +24,12 @@ public class Evaluator {
             return expression;
         } else if (expression.startsWith("(SETQ")) {
             return handleSetq(expression, context);
-        } else if (expression.startsWith("'") || expression.startsWith("(QUOTE ")) {
+        } else if (expression.startsWith("'") || expression.startsWith("(QUOTE ") || expression.startsWith("(' ")) {
             return handleQuote(expression);
         } else if (expression.startsWith("(DEFUN")) {
             defineFunction(expression);
             return "Function defined.";
-        } else if (expression.startsWith("(IF")) {
+        } else if (expression.startsWith("(IF") || expression.startsWith("(COND ")) {
             return handleIf(expression, context); // Llama a evalIfStatement para manejar el IF
         } else {
             String functionName = getFunctionName(expression);
@@ -43,43 +43,65 @@ public class Evaluator {
         }
     }
 
-
-
     private String handleSetq(String expression, ExecutionContext context) throws Exception {
-        // Primero, elimina los paréntesis exteriores y luego divide la expresión.
         String trimmedExpression = expression.trim().substring(5, expression.length() - 1).trim();
-        
-        // Divide la expresión en partes basadas en espacios, esperando al menos 2 partes después de SETQ: nombre de la variable y valor.
         String[] parts = trimmedExpression.split("\\s+", 2);
     
-        // Verifica que tengamos al menos dos partes: el nombre de la variable y el valor/la expresión a asignar.
         if (parts.length < 2) {
             throw new IllegalArgumentException("Invalid SETQ expression: " + expression);
         }
     
-        // Nombre de la variable es el primer elemento, y el valor/la expresión a asignar es el segundo.
         String variableName = parts[0];
         String valueExpression = parts[1];
     
-        // Evalúa el valor/la expresión a asignar para obtener el valor final.
-        String evaluatedValue = eval(valueExpression, context);
-    
-        // Asigna el valor evaluado a la variable en el contexto.
-        context.setVariable(variableName, evaluatedValue);
-    
-        // Retorna el valor asignado para confirmación.
-        return evaluatedValue;
-    }
-    
+        // Si el valor a asignar es una lista o un valor simple
+        if (valueExpression.startsWith("(") && valueExpression.endsWith(")")) {
+            // Para listas, podrías optar por evaluar o simplemente almacenar la expresión literal
+            // Aquí estamos eligiendo almacenar la expresión literal sin evaluar
+            context.setVariable(variableName, valueExpression);
+            return valueExpression;
+        } else {
+            // Si no es una lista, evalúa la expresión para obtener el valor final y luego asigna ese valor a la variable
+            String evaluatedValue = eval(valueExpression, context);
+            context.setVariable(variableName, evaluatedValue);
+            return evaluatedValue;
+        }
+    }    
+       
     private String handleAtom(String expression, ExecutionContext context) throws Exception {
-        String argument = extractArgument(expression); // Implementa esta función para extraer el único argumento de la expresión
+        // Extrae el argumento de la expresión, considerando que podría ser una expresión compuesta (como una lista)
+        String argument = extractCompleteArgument(expression);
+    
+        // Primero, intenta obtener el valor de la variable del contexto si el argumento es un nombre de variable.
+        String value = context.getVariable(argument);
+        if (!value.isEmpty()) {
+            argument = value; // Si el argumento es una variable, usa su valor para la comprobación.
+        }
+    
+        // Intenta determinar si el argumento (o el valor de la variable) es un número
         try {
-            Double.parseDouble(argument); // Intenta parsear como número
+            Double.parseDouble(argument);
             return "T"; // Es un átomo si es un número
         } catch (NumberFormatException e) {
-            return argument.matches("[a-zA-Z]+") ? "T" : "NIL"; // Es un átomo si es una palabra sin espacios
+            // Verifica si el argumento (o el valor de la variable) es una lista
+            if (argument.startsWith("(") && argument.endsWith(")")) {
+                return "NIL"; // Es una lista, por lo tanto, no es un átomo
+            } else if (argument.matches("[a-zA-Z]+")) {
+                return "T"; // Es un átomo si es una palabra sin espacios (y no representa directamente una lista)
+            } else {
+                return "NIL"; // Por defecto, no es un átomo si no cumple los criterios anteriores
+            }
         }
     }
+    
+    private String extractCompleteArgument(String expression) {
+        expression = expression.trim(); // Limpia espacios iniciales y finales
+        int firstSpaceIndex = expression.indexOf(' ');
+        int start = expression.indexOf('(', firstSpaceIndex) + 1;
+        int end = expression.lastIndexOf(')');
+        return expression.substring(start, end).trim();
+    }
+                
     
     private String handleList(String expression, ExecutionContext context) throws Exception {
         // Lista siempre retorna T porque cualquier expresión dentro de (LIST ...) se considera una lista
@@ -87,38 +109,70 @@ public class Evaluator {
     }
     
     private String handleEqual(String expression, ExecutionContext context) throws Exception {
-        // Extrae los dos argumentos y compáralos
-        String[] arguments = extractArguments(expression, 2); // Implementa esta función para extraer exactamente dos argumentos
-        double operand1 = Double.parseDouble(eval(arguments[0], context));
-        double operand2 = Double.parseDouble(eval(arguments[1], context));
-        return operand1 == operand2 ? "T" : "NIL";
+        // Extrae los dos argumentos
+        String[] arguments = extractArguments(expression, 2);
+    
+        // Evalúa las expresiones y toma en cuenta las variables
+        String value1 = evaluateExpression(arguments[0], context);
+        String value2 = evaluateExpression(arguments[1], context);
+    
+        // Compara los valores obtenidos
+        return value1.equals(value2) ? "T" : "NIL";
     }
+    
+    private String evaluateExpression(String expression, ExecutionContext context) throws Exception {
+        // Si es un número, simplemente devuelve el número como una cadena
+        if (expression.matches("-?\\d+(\\.\\d+)?")) {
+            return expression;
+        }
+    
+        // Si es una variable, obtiene su valor del contexto y evalúa nuevamente la expresión
+        String value = context.getVariable(expression);
+        if (value.isEmpty()) {
+            throw new IllegalArgumentException("Variable " + expression + " is not defined.");
+        }
+        return eval(value, context); // Evalúa nuevamente la expresión
+    }
+    
+    
 
     private String handleComparison(String expression, ExecutionContext context) throws Exception {
         String operator = expression.substring(1, 2);
         String[] arguments = extractArguments(expression, 2);
         double operand1;
         double operand2;
-
+    
         // Evalúa las expresiones y toma en cuenta las variables
         if (arguments[0].matches("-?\\d+(\\.\\d+)?")) {
             operand1 = Double.parseDouble(arguments[0]);  // Si es un número, simplemente lo conviertes
         } else {
             operand1 = Double.parseDouble(context.getVariable(arguments[0])); // Si es una variable, obtienes su valor del contexto
         }
-
+    
         if (arguments[1].matches("-?\\d+(\\.\\d+)?")) {
             operand2 = Double.parseDouble(arguments[1]);  // Si es un número, simplemente lo conviertes
         } else {
             operand2 = Double.parseDouble(context.getVariable(arguments[1])); // Si es una variable, obtienes su valor del contexto
         }
-
+    
         // Realiza la comparación
-        boolean result = operator.equals("<") ? operand1 < operand2 : operand1 > operand2;
-
+        boolean result;
+        switch (operator) {
+            case "<":
+                result = operand1 < operand2;
+                break;
+            case ">":
+                result = operand1 > operand2;
+                break;
+            case "=":
+                result = operand1 == operand2;
+                break;
+            default:
+                throw new IllegalArgumentException("Unknown operator: " + operator);
+        }
+    
         return result ? "T" : "NIL";
-    }
-
+    }    
 
     private String handleArithmetic(String expression, ExecutionContext context) throws Exception {
         String trimmedExpression = expression.trim().substring(1, expression.length() - 1).trim();
@@ -195,35 +249,34 @@ public class Evaluator {
     
         ExecutionContext functionContext = new ExecutionContext();
         for (int i = 0; i < arguments.size(); i++) {
-            // Reemplaza la llamada a eval con una lógica similar a evaluateOperand
-            // para manejar específicamente nombres de variables y expresiones anidadas.
             String arg = arguments.get(i);
-            String argValue;
-            if (arg.matches("-?\\d+(\\.\\d+)?")) { // Es un número
-                argValue = arg;
+            // Verifica si el argumento es una expresión o una referencia directa a una variable.
+            if (arg.matches("-?\\d+(\\.\\d+)?") || arg.startsWith("(")) {
+                // Si el argumento es un número o una expresión, evalúa antes de pasarlo.
+                String evaluatedArg = eval(arg, context);
+                functionContext.setVariable(function.getParameters().get(i), evaluatedArg);
             } else {
-                // Intenta obtener el valor de la variable del contexto si no es un número.
-                argValue = context.getVariable(arg);
-                if (argValue.equals("NIL")) {
-                    throw new IllegalArgumentException("Variable " + arg + " is not defined.");
+                // Si es un nombre de variable, pasa el argumento directamente.
+                // Verifica si la variable existe en el contexto global antes de usar su nombre como valor.
+                String value = context.getVariable(arg);
+                if (!value.isEmpty()) {
+                    functionContext.setVariable(function.getParameters().get(i), value);
+                } else {
+                    // Si la variable no está definida en el contexto global, trata el argumento como una cadena literal.
+                    functionContext.setVariable(function.getParameters().get(i), arg);
                 }
             }
-            functionContext.setVariable(function.getParameters().get(i), argValue);
         }
     
         return eval(function.getBody(), functionContext);
-    }    
+    }
+    
+        
 
     private String getFunctionName(String expression) {
         int spaceIndex = expression.indexOf(' ');
         int endIndex = spaceIndex != -1 ? spaceIndex : expression.length();
         return expression.substring(1, endIndex);
-    }
-
-    private String extractArgument(String expression) {
-        // Esta función asume que se extrará el primer argumento después del operador
-        String trimmedExpression = expression.trim().substring(expression.indexOf(' ') + 1, expression.length() - 1).trim();
-        return extractFirstArgument(trimmedExpression);
     }
     
     private String[] extractArguments(String expression, int expectedArgs) {
@@ -291,29 +344,35 @@ public class Evaluator {
         }
         return arguments;
     }
+
     private String handleIf(String expression, ExecutionContext context) throws Exception {
-        String codigo = expression.substring(4, expression.length() - 1);
-
-        String[] partes = codigo.split("(?=\\()");
-
-        if (partes.length != 3) {
+        String code = expression.substring(4, expression.length() - 1);
+    
+        // Divide la expresión en sus partes, considerando los condicionales IF anidados
+        List<String> parts = splitArguments(code);
+    
+        if (parts.size() != 3) {
             throw new IllegalArgumentException("IF statement must have exactly 3 parts");
         }
-
-        String conditionResult = eval(partes[0], context);
-
-        String parteAEvaluar = conditionResult.equals("T") ? partes[1] : partes[2];
-
-        return eval(parteAEvaluar, context);
+    
+        String conditionResult = eval(parts.get(0), context);
+    
+        // Evalúa recursivamente la rama que cumple la condición
+        if (conditionResult.equals("T")) {
+            return evalRecursively(parts.get(1), context);
+        } else {
+            return evalRecursively(parts.get(2), context);
+        }
     }
-
-
-
-    private void executeAction(String action) {
-        // Aquí puedes implementar la lógica para ejecutar la acción correspondiente
-        System.out.println("Ejecutando acción: " + action);
-    }
-
-
-
+    
+    // Función auxiliar para evaluar expresiones recursivamente
+    private String evalRecursively(String expression, ExecutionContext context) throws Exception {
+        if (expression.startsWith("(")) {
+            // Si la expresión comienza con '(', es una expresión compuesta
+            return eval(expression, context);
+        } else {
+            // Si no, simplemente es un átomo o una expresión simple
+            return expression;
+        }
+    }    
 }
