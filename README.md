@@ -15,11 +15,11 @@ Este repositorio contiene un intérprete LISP implementado en Java. El intérpre
 El intérprete maneja las siguientes expresiones y funciones LISP:
 
 - `(ATOM <expresión>)`: Evalúa si la expresión es un átomo.
-- `(LIST <elementos>)`: Crea una lista con los elementos dados.
+- `(LIST (<elementos>))`: Crea una lista con los elementos dados.
 - `(EQUAL <exp1> <exp2>)`: Compara si dos expresiones son iguales.
 - `(SETQ <variable> <valor>)`: Asigna un valor a una variable.
-- `(IF <condición> <expresión-verdadera> <expresión-falsa>)`: Ejecuta una expresión basada en una condición.
-- `(DEFUN <nombre-función> (<parámetros>) <cuerpo>)`: Define una nueva función.
+- `(IF (<condición>) (<expresión-verdadera>) (<expresión-falsa>))`: Ejecuta una expresión basada en una condición.
+- `(DEFUN <nombre-función> (<parámetros>) (<cuerpo>))`: Define una nueva función.
 
 ## Cómo usar
 
@@ -35,11 +35,12 @@ Por defecto, busca un archivo llamado `data/expressions.txt`. Asegúrate de que 
 
 Aquí tienes un ejemplo de cómo el archivo `data/expressions.txt` podría verse:
 
+```lisp
 (SETQ X 10)
 (SETQ Y 20)
 (DEFUN FACT (N) (IF (= N 0) 1 (* N (FACT (- N 1)))))
 (FACT 5)
-
+```
 
 Cuando ejecutes `LispInterpreter`, se evaluarán las expresiones del archivo y se mostrarán los resultados. Después de procesar el archivo, podrás introducir más expresiones directamente en la consola:
 
@@ -54,5 +55,6 @@ Result: 120
 Result: 5
 > exit
 Interpreter terminated.
+```
 
 Este enfoque te permite probar rápidamente muchas expresiones almacenadas en un archivo, así como interactuar de manera ad hoc con el intérprete a través de la línea de comandos.
