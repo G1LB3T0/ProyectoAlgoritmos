@@ -12,6 +12,10 @@ public class ExecutionContext {
         return variables.getOrDefault(name, "NIL"); // Retorna "NIL" si la variable no existe
     }    
 
+    public Map<String, String> getVariables(){
+        return variables;
+    }
+
     // Método para clonar el contexto actual, útil para llamadas a funciones
     public ExecutionContext clone() {
         ExecutionContext newContext = new ExecutionContext();
