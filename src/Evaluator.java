@@ -25,14 +25,14 @@ public class Evaluator {
         } else if (expression.startsWith("(SETQ")) {
             return handleSetq(expression, context);
         } else if (expression.startsWith("'") || expression.startsWith("(QUOTE ") || expression.startsWith("(' ")) {
-            return handleQuote(expression);
+            return handleQuote(expression, context);
         }
 
         if (expression.startsWith("(DEFUN")) {
             defineFunction(expression);
             return "Function defined.";
         } else if (expression.startsWith("(IF") || expression.startsWith("(COND ")) {
-            return handleIf(expression, context); // Llama a evalIfStatement para manejar el IF
+            return handleCondition(expression, context); // Llama a evalIfStatement para manejar el IF
         } else {
             String functionName = getFunctionName(expression);
             if (functions.containsKey(functionName)) {
@@ -71,44 +71,80 @@ public class Evaluator {
     }    
        
     private String handleAtom(String expression, ExecutionContext context) throws Exception {
-        // Extrae el argumento de la expresión, considerando que podría ser una expresión compuesta (como una lista)
         String argument = extractCompleteArgument(expression);
+        
+        // Consulta si la variable existe en el contexto. Si no existe, "value" será null.
+        String value = context.getVariables().containsKey(argument) ? context.getVariable(argument) : "No definido";
     
-        // Primero, intenta obtener el valor de la variable del contexto si el argumento es un nombre de variable.
-        String value = context.getVariable(argument);
-        if (!value.isEmpty()) {
-            argument = value; // Si el argumento es una variable, usa su valor para la comprobación.
+        // Actualiza el argumento solo si la variable existe en el contexto y tiene un valor diferente de "NIL".
+        if (!value.equals("No definido") && !value.equals("NIL")) {
+            argument = value;
         }
     
-        // Intenta determinar si el argumento (o el valor de la variable) es un número
+    
+        // Verifica si el argumento representa directamente una lista
+        if (argument.startsWith("(") && argument.endsWith(")")) {
+            return "NIL"; // Es una lista, por lo tanto, no es un átomo
+        }
+    
+        // Intenta determinar si el argumento es un número
         try {
             Double.parseDouble(argument);
             return "T"; // Es un átomo si es un número
         } catch (NumberFormatException e) {
-            // Verifica si el argumento (o el valor de la variable) es una lista
-            if (argument.startsWith("(") && argument.endsWith(")")) {
-                return "NIL"; // Es una lista, por lo tanto, no es un átomo
-            } else if (argument.matches("[a-zA-Z]+")) {
-                return "T"; // Es un átomo si es una palabra sin espacios (y no representa directamente una lista)
+            // Si no es un número, verifica si el argumento es un símbolo válido
+            if (argument.matches("[a-zA-Z]+") || value.equals("NIL")) {
+                return "T"; // Es un átomo si es un símbolo o "NIL"
             } else {
-                return "NIL"; // Por defecto, no es un átomo si no cumple los criterios anteriores
+                return "NIL"; // No es un átomo si no cumple los criterios anteriores
             }
         }
     }
     
+        
+    
     private String extractCompleteArgument(String expression) {
-        expression = expression.trim(); // Limpia espacios iniciales y finales
-        int firstSpaceIndex = expression.indexOf(' ');
-        int start = expression.indexOf('(', firstSpaceIndex) + 1;
-        int end = expression.lastIndexOf(')');
-        return expression.substring(start, end).trim();
+        expression = expression.trim();
+        // Busca el inicio del argumento después del primer espacio y hasta el último paréntesis
+        int firstSpaceIndex = expression.indexOf(' ') + 1;
+        // El argumento es lo que está después del nombre del comando, incluyendo los paréntesis
+        return expression.substring(firstSpaceIndex, expression.length() - 1).trim();
     }
-                
+                   
     
     private String handleList(String expression, ExecutionContext context) throws Exception {
-        // Lista siempre retorna T porque cualquier expresión dentro de (LIST ...) se considera una lista
-        return "T";
+        // Remueve la palabra "LIST" si está presente y los paréntesis exteriores.
+        // También maneja el caso de que la lista esté precedida por una comilla simple para evitar evaluación.
+        boolean evaluateItems = true;
+        if (expression.startsWith("(LIST")) {
+            expression = expression.substring(5, expression.length() - 1).trim();
+        } else if (expression.startsWith("'")) {
+            evaluateItems = false;
+            expression = expression.substring(2, expression.length() - 1).trim();
+        } else {
+            expression = expression.substring(1, expression.length() - 1).trim();
+        }
+    
+        // Divide los elementos de la lista
+        List<String> elements = splitArguments(expression);
+        StringBuilder listRepresentation = new StringBuilder("(");
+    
+        for (int i = 0; i < elements.size(); i++) {
+            String element = elements.get(i);
+            if (evaluateItems) {
+                // Evalúa cada elemento si se debe evaluar
+                element = eval(element, context);
+            }
+            listRepresentation.append(element);
+            if (i < elements.size() - 1) {
+                listRepresentation.append(" ");
+            }
+        }
+        listRepresentation.append(")");
+    
+        return listRepresentation.toString();
     }
+    
     
     private String handleEqual(String expression, ExecutionContext context) throws Exception {
         // Extrae los dos argumentos
@@ -273,8 +309,6 @@ public class Evaluator {
         return eval(function.getBody(), functionContext);
     }
     
-        
-
     private String getFunctionName(String expression) {
         int spaceIndex = expression.indexOf(' ');
         int endIndex = spaceIndex != -1 ? spaceIndex : expression.length();
@@ -319,13 +353,32 @@ public class Evaluator {
         return argsStr; // Fallback, debería manejarse adecuadamente en el código que llama
     }   
 
-    private String handleQuote(String expression) {
-        String quotedExpression = expression.startsWith("'") ?
-            expression.substring(1) :
-            expression.substring("(QUOTE ".length(), expression.length() - 1);
-
-        return quotedExpression.trim();
-    }
+    private String handleQuote(String expression, ExecutionContext context) throws Exception {
+        String quotedExpression;
+        if (expression.startsWith("'")) {
+            quotedExpression = expression.substring(1);
+        } else {
+            quotedExpression = expression.substring("(QUOTE ".length(), expression.length() - 1);
+        }
+        
+        quotedExpression = quotedExpression.trim();
+    
+        // Verifica si la expresión está entre comillas dobles para tratarla como un literal
+        if (quotedExpression.startsWith("\"") && quotedExpression.endsWith("\"")) {
+            // Si está entre comillas, devuelve el contenido sin las comillas
+            return quotedExpression.substring(1, quotedExpression.length() - 1);
+        } else {
+            // Si no está entre comillas, verifica si es una variable en el contexto
+            String value = context.getVariable(quotedExpression);
+            if (!value.isEmpty()) {
+                // Si la expresión es una variable definida, devuelve su valor
+                return value;
+            } else {
+                // Si no es una variable definida, devuelve la expresión literal
+                return quotedExpression;
+            }
+        }
+    }    
 
     private List<String> splitArguments(String argsStr) {
         List<String> arguments = new ArrayList<>();
@@ -347,7 +400,7 @@ public class Evaluator {
         return arguments;
     }
 
-    private String handleIf(String expression, ExecutionContext context) throws Exception {
+    private String handleCondition(String expression, ExecutionContext context) throws Exception {
         String code = expression.substring(4, expression.length() - 1);
     
         // Divide la expresión en sus partes, considerando los condicionales IF anidados
